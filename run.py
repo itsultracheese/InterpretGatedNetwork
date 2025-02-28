@@ -16,6 +16,8 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # SBM and InterpGN model hyperparameters
+    parser.add_argument("--data", type=str, default="UEA", choices=['UEA', 'Monash'])
+    parser.add_argument("--data_root", type=str, default="./data/UEA_multivariate")
     parser.add_argument("--model", type=str, default='SBM', choices=['SBM', 'LTS', 'InterpGN', 'DNN'])
     parser.add_argument("--dnn_type", type=str, default='FCN', choices=['FCN', 'Transformer', 'TimesNet', 'PatchTST', 'ResNet'])
     parser.add_argument("--dataset", type=str, default="BasicMotions")
@@ -38,7 +40,7 @@ def get_args():
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument('--log_interval', type=int, default=20)
     parser.add_argument("--min_epochs", type=int, default=0)
-    parser.add_argument("--train_epochs", type=int, default=int(1e3))
+    parser.add_argument("--train_epochs", type=int, default=500)
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--patience", type=int, default=50)
     parser.add_argument("--multi_gpu", action='store_true')
@@ -82,9 +84,8 @@ def get_args():
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
 
     args = parser.parse_args()
-    args.root_path = f"./data/UEA_multivariate/{args.dataset}"
+    args.root_path = f"{args.data_root}/{args.dataset}"
     args.is_training = True
-    args.data = "UEA"
     return args
 
 
@@ -120,15 +121,15 @@ if __name__ == "__main__":
         
         experiment.model.load_state_dict(torch.load(f"{experiment.checkpoint_dir}/checkpoint.pth"))
         print(f"{'=' * 5} Test {'=' * 5} ")
-        cls_result = experiment.test(
+        test_loss, _, test_df = experiment.test(
             save_csv=True,
             result_dir=f"./result/{args.model}"
         )
         import pickle
-        with open(f"{experiment.checkpoint_dir}/cls_result.pkl", 'wb') as f:
-            pickle.dump(cls_result, f)
-        print(f"Test results saved at: {experiment.checkpoint_dir}/cls_result.pkl")
+        with open(f"{experiment.checkpoint_dir}/test_results.pkl", 'wb') as f:
+            pickle.dump(test_df, f)
+        print(f"Test results saved at: {experiment.checkpoint_dir}/test_results.pkl")
 
-        print(f"Test | Loss {cls_result.loss:.4f} | Accuracy {cls_result.accuracy:.4f}")
+        print(f"Test | Loss {test_loss:.4f}")
         print()
         torch.cuda.empty_cache()

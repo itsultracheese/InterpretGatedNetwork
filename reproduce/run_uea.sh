@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Model Configs
+# Model Configs, default settings, change as needed
 MODEL=InterpGN
 DNN_TYPE=FCN
 NUM_SHAPELET=10
@@ -12,44 +12,42 @@ GATING_VALUE=1
 
 
 UEA_DATASETS=(
-    # "ArticularyWordRecognition"
-    # "AtrialFibrillation"
+    "ArticularyWordRecognition"
+    "AtrialFibrillation"
     "BasicMotions"
-    # "CharacterTrajectories"
-    # "LSST"
-    # "ERing"
-    # "Epilepsy"
-    # "EthanolConcentration" 
-    # "FaceDetection"
-    # "FingerMovements"
-    # "Handwriting"
-    # "Heartbeat"
-    # "InsectWingbeat"
-    # "JapaneseVowels"
-    # "Libras"
-    # "NATOPS"
-    # "PenDigits"
-    # "RacketSports"
-    # "SpokenArabicDigits" 
-    # "UWaveGestureLibrary"
-    # "Cricket" 
-    # "PhonemeSpectra" 
-    # "HandMovementDirection"
-    # "SelfRegulationSCP1"
-    # "SelfRegulationSCP2"
-    # "StandWalkJump"
-    # # Datasets that MAY cause high memory usage (many variates)
-    # "PEMS-SF"
-    # "DuckDuckGeese"
-    # # Datasets with VERY LONG length and WILL cause high memory usage
-    # "MotorImagery"
-    # "EigenWorms"
+    "CharacterTrajectories"
+    "LSST"
+    "ERing"
+    "Epilepsy"
+    "EthanolConcentration" 
+    "FaceDetection"
+    "FingerMovements"
+    "Handwriting"
+    "Heartbeat"
+    "InsectWingbeat"
+    "JapaneseVowels"
+    "Libras"
+    "NATOPS"
+    "PenDigits"
+    "RacketSports"
+    "SpokenArabicDigits" 
+    "UWaveGestureLibrary"
+    "Cricket" 
+    "PhonemeSpectra" 
+    "HandMovementDirection"
+    "SelfRegulationSCP1"
+    "SelfRegulationSCP2"
+    "StandWalkJump"
+    # Datasets that MAY cause high memory usage (many variates)
+    "PEMS-SF"
+    "DuckDuckGeese"
+    # Datasets with VERY LONG length and WILL cause high memory usage
+    "MotorImagery"
+    "EigenWorms"
 )
 
 
-# SEEDS=(0 42 1234 8237 2023)
-
-SEEDS=(0)
+SEEDS=(0 42 1234 8237 2023)
 
 for dataset in ${UEA_DATASETS[@]}; do
     for seed in ${SEEDS[@]}; do
@@ -57,7 +55,7 @@ for dataset in ${UEA_DATASETS[@]}; do
             --model $MODEL \
             --dnn_type $DNN_TYPE \
             --dataset $dataset \
-            --train_epochs 300 \
+            --train_epochs 500 \
             --batch_size 32 \
             --lr 5e-3 \
             --dropout 0. \
