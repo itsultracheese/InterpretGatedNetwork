@@ -1,4 +1,4 @@
-# Interpretability Gated networks: A mixture-of-experts approach for interpretable time-series classification using shapelets.
+# Interpretability Gated Networks: A mixture-of-experts approach for interpretable time-series classification using shapelets.
 
 <div align="center">
     <h3><a href="https://openreview.net/forum?id=n34taxF0TC">Shedding Light on Time Series Classification using Interpretability Gated Networks</a></h3>
