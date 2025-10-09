@@ -43,8 +43,97 @@ def ShapeletDistance(x, s):
     return ShapeletDistanceFunc.apply(x, s)
 
 
+def _softmin3(a, b, c, gamma: float):
+    # a, b, c: (...), gamma>0
+    # returns softmin over the last (implicit) dim of [a,b,c]
+    stack = torch.stack([a, b, c], dim=-1)  # (..., 3)
+    return -gamma * torch.logsumexp(-stack / gamma, dim=-1)
+
+@torch.no_grad()
+def _validate_gamma(gamma: float):
+    if not (gamma is not None and gamma > 0):
+        raise ValueError("soft-DTW requires gamma > 0. Set a small positive gamma (e.g., 0.01–0.1).")
+
+def _dtw_distance(x_chunk: torch.Tensor,
+                  w_chunk: torch.Tensor,
+                  gamma: float = 0.05,
+                  normalize: bool = True) -> torch.Tensor:
+    """
+    Memory-efficient soft-DTW between each window in x_chunk and each shapelet in w_chunk.
+
+    Args:
+        x_chunk: (B, M_chunk, 1, L) or (B, M_chunk, L)
+        w_chunk: (1, N_chunk, L) or (N_chunk, L)
+        gamma:   soft-min temperature (>0). Smaller -> closer to hard DTW.
+        normalize: divide final distance by L (to align with mean-based euclidean).
+
+    Returns:
+        dst: (B, M_chunk, N_chunk) soft-DTW distances.
+    """
+    _validate_gamma(gamma)
+
+    # Squeeze potential singleton dims:
+    if x_chunk.dim() == 4:
+        # (B, M, 1, L) -> (B, M, L)
+        xw = x_chunk.squeeze(2)
+    else:
+        xw = x_chunk
+    if w_chunk.dim() == 3:
+        # (1, N, L) -> (N, L)
+        sw = w_chunk.squeeze(0)
+    else:
+        sw = w_chunk
+
+    B, M, L = xw.shape
+    N, Lw = sw.shape
+    assert L == Lw, "Window and shapelet lengths must match."
+
+    device = xw.device
+    dtype = xw.dtype
+    inf = torch.tensor(float('inf'), device=device, dtype=dtype)
+
+    # Output distances
+    out = torch.empty((B, M, N), device=device, dtype=dtype)
+
+    # Dynamic programming over columns j=1..L
+    # We keep prev/curr DP rows with shape (B, M, N, L+1)
+    # (chunking over M,N is already handled by your outer loops)
+    prev = torch.full((B, M, N, L + 1), inf, device=device, dtype=dtype)
+    prev[..., 0] = 0.0
+
+    # Pre-extract for light indexing in inner loops
+    X = xw  # (B, M, L)
+    S = sw  # (N, L)
+
+    for j in range(1, L + 1):
+        Sj = S[:, j - 1]  # (N,)
+        curr = torch.full((B, M, N, L + 1), inf, device=device, dtype=dtype)
+
+        # Fill row i=1..L
+        # cost_ij computed on the fly to avoid (B,M,N,L) buffers
+        for i in range(1, L + 1):
+            Xi = X[..., i - 1]                  # (B, M)
+            # Broadcast to (B, M, N): (B,M,1) - (1,1,N)
+            diff = Xi.unsqueeze(-1) - Sj.view(1, 1, N)
+            cost_ij = diff * diff               # (B, M, N)
+
+            a = prev[..., i]                    # up:    D[i-1, j]
+            b = curr[..., i - 1]                # left:  D[i,   j-1]
+            c = prev[..., i - 1]                # diag:  D[i-1, j-1]
+            sm = _softmin3(a, b, c, gamma)
+            curr[..., i] = cost_ij + sm
+
+        prev = curr  # move to next column
+
+    dst = prev[..., L]  # (B, M, N)
+    if normalize:
+        dst = dst / L
+    return dst
+
+
+
 class Shapelet(nn.Module):
-    def __init__(self, dim_data, shapelet_len, num_shapelet=10, stride=1, eps=1., distance_func='euclidean', memory_efficient=False):
+    def __init__(self, dim_data, shapelet_len, num_shapelet=10, stride=1, eps=1., distance_func='euclidean', memory_efficient=False, dtw_band=None, dtw_chunk_M=16, dtw_chunk_N=8):
         super().__init__()
         
         self.dim = dim_data
@@ -56,18 +145,48 @@ class Shapelet(nn.Module):
         
         self.weights = nn.Parameter(torch.normal(0, 1, (self.n, self.dim, self.length)), requires_grad=True)
         self.eps = eps
+
+        self.dtw_band = dtw_band          # e.g. int like 5..20, or None
+        self.dtw_chunk_M = dtw_chunk_M    # tune based on memory
+        self.dtw_chunk_N = dtw_chunk_N
         
     def forward(self, x):
+        torch.cuda.reset_peak_memory_stats()
         x = x.unfold(2, self.length, self.stride) # .permute((0, 2, 1, 3)).unsqueeze(2)#.contiguous()
-        x = rearrange(x, 'b m t l -> b t 1 m l')
 
         if self.distance_func == 'cosine':
+            x = rearrange(x, 'b m t l -> b t 1 m l')
+            print(x.shape)
+            print(self.weights.shape)
             d = nn.functional.cosine_similarity(x, self.weights, dim=-1)
             d = torch.ones_like(d) - d
+            print(d.shape)
+            print()
         elif self.distance_func == 'pearson':
+            x = rearrange(x, 'b m t l -> b t 1 m l')
             d = pearson_corrcoef(x, self.weights)
             d = torch.ones_like(d) - d
+        elif self.distance_func == 'dtw':
+            x = rearrange(x, 'b m t l -> b t m l')
+            B, M, C, L = x.shape
+            N = self.weights.shape[0]
+            d = torch.zeros((B, M, N, C), device=x.device, dtype=x.dtype)
+
+            # fill in d by chunks
+            w = self.weights
+            for m0 in range(0, M, self.dtw_chunk_M):
+                m1 = min(M, m0 + self.dtw_chunk_M)
+                for n0 in range(0, N, self.dtw_chunk_N):
+                    n1 = min(N, n0 + self.dtw_chunk_N)
+                    for c in range(C):
+                        x_chunk = x[:, m0:m1, c, :].unsqueeze(2)
+                        w_chunk = w[n0:n1, c, :].unsqueeze(0)
+                        dst = _dtw_distance(x_chunk, w_chunk)
+                        d[:, m0:m1, n0:n1, c] = dst
+                        del x_chunk, w_chunk, dst
+                        torch.cuda.empty_cache()
         else:
+            x = rearrange(x, 'b m t l -> b t 1 m l')
             if self.memory_efficient:
                 d = ShapeletDistance(x, self.weights)
             else:
@@ -80,6 +199,11 @@ class Shapelet(nn.Module):
         soft = torch.softmax(p, dim=1)
         onehot_max = hard + soft - soft.detach()
         max_p = torch.sum(onehot_max * p, dim=1)
+
+        print("alloc:", torch.cuda.memory_allocated() / 1e9, "GB")
+        print("reserved:", torch.cuda.memory_reserved() / 1e9, "GB")
+        print("peak alloc:", torch.cuda.max_memory_allocated() / 1e9, "GB")
+        print(torch.cuda.memory_summary(abbreviated=True))
 
         return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
     

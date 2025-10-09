@@ -11,14 +11,15 @@ EPS=1
 BETA_SCHEDULE=constant
 GATING_VALUE=1
 DATA_ROOT=/media/ssd-3t/amiftakhova/bimai
+DISTANCE_FUNC=dtw
 
 
 EEG_DATASETS=(
-    "FaceDetection"
-    "FingerMovements"
+    # "FaceDetection"
+    # "FingerMovements"
     "SelfRegulationSCP1"
-    "SelfRegulationSCP2"
-    "MotorImagery"
+    # "SelfRegulationSCP2"
+    # "MotorImagery"
 )
 # SEEDS=(8237 2023 8237 2023 8237)
 SEEDS=(0)
@@ -41,6 +42,7 @@ for dataset in ${EEG_DATASETS[@]}; do
             --beta_schedule $BETA_SCHEDULE \
             --seed $seed \
             --gating_value $GATING_VALUE \
-            --amp
+            --amp \
+            --distance_func $DISTANCE_FUNC
     done
 done
