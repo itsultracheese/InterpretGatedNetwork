@@ -6,6 +6,16 @@ from exp.experiment_regression import Experiment as RegressionExperiment
 import random
 import numpy as np
 
+def pick_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    # поддержка Apple Silicon (Metal)
+    use_mps = getattr(torch.backends, "mps", None)
+    if use_mps is not None and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 exp_dict = {
     "classification": ClassificationExperiment,
     "regression": RegressionExperiment
@@ -14,6 +24,11 @@ exp_dict = {
 
 def get_args():
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('--pool', type=str, default='lse', choices=['max', 'lse'])
+    parser.add_argument('--pool_tau', type=float, default=10.0)
+    parser.add_argument('--learnable_tau', action='store_true', default=False)
+
 
     # SBM and InterpGN model hyperparameters
     parser.add_argument("--data", type=str, default="UEA", choices=['UEA', 'Monash'])
@@ -84,6 +99,18 @@ def get_args():
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
 
     args = parser.parse_args()
+
+    device = pick_device()
+    args.device = device.type
+
+    # AMP включаем только на CUDA
+    if hasattr(args, "amp"):
+        args.amp = args.amp and (device.type == "cuda")
+
+    print(f"[Device] Using {device.type.upper()}  |  AMP: {getattr(args, 'amp', False)}")
+
+
+
     args.root_path = f"{args.data_root}/{args.dataset}"
     args.is_training = True
     return args
