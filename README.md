@@ -88,6 +88,10 @@ Our experiments highlight the need for the more rigorous analysis on the approac
 The experiments demonstrated that the test accuracy on the three datasets benefitted from utilizing sampling frequency to induce the lengths of the shapelets, thus, it might be useful to test this hypothesis on the other datasets as well.
 Since our experiments demonstrated that the learned shapelets are more useful for the classification task, it might make sense to try to utilize the similar approach for learning the shapelets for the time series representation in the transformer models such as ShapeFormer, or even the foundation models for EEG data.
 
+### Logging
+
+Here is the link to our [Neptune.ai](https://app.neptune.ai/o/gribanovds/org/interp-gn/runs/compare?viewId=standard-view&detailsTab=charts&dash=charts&compare=EwFiA)
+
 ---
 
 ### References
