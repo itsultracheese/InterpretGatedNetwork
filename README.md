@@ -1,61 +1,100 @@
-# Interpretability Gated Networks: A mixture-of-experts approach for interpretable time-series classification using shapelets.
+# A hybrid of shapelet logic and neural networks with confidence-gating for accuracy and interpretability
 
-<div align="center">
-    <h3><a href="https://openreview.net/forum?id=n34taxF0TC">Shedding Light on Time Series Classification using Interpretability Gated Networks</a></h3>
-    <h4>ICLR 2025</h4>
-    <h4>Yunshi Wen, Tengfei Ma, Ronny Luss, Debarun Bhattacharjya, Achille Fokoue, Anak Agung Julius</h4>
-</div>
+Shapelets are short sequences with certain pattern which were originally defined as discriminative time-series subsequences to distinguish different categories
 
-Interpretability Gated Networks (InterpGN) is a hybrid framework for time-series classification that combines the strengths of a shapelet-based interpretable model (Shapelet Bottleneck Model) and deep neural networks. It uses a novel gating function - based on the confidence of an interpretable expert employing shapelets - to decide when human-understandable features suffice or when deeper analysis is needed. 
+<img width="711" height="318" alt="image" src="https://github.com/user-attachments/assets/0d223e08-b8bc-4cb3-aa20-9aa24aa6bdfd" />
 
+**Interpretability Gated Networks (InterpGN)** is a hybrid framework for time-series classification that combines:
+- an **interpretable shapelet-based expert** (Shapelet Bottleneck Model, SBM),
+- a **deep neural network backbone** (e.g., FCN),
+- and a **novel gating mechanism** that dynamically decides whether human-understandable shapelet features are sufficient or if deeper representation learning is needed.
 
-## Usage
+<img width="698" height="345" alt="image" src="https://github.com/user-attachments/assets/5eb88d84-d6c8-4547-99cd-58b18bcb328d" />
 
-### Environment Setup:
+The goal of this project is to try to enhance the work of InterpGN for biomedical (e.g. EEG) data
 
-Package versions: Python 3.11. PyTorch 2.4.0 (should also be compatible with later versions).
+---
 
-### Data Preparation
-Download the datasets and put them in the `./data` folder. The datasets are available at:
-- [UEA Multivariate Time-Series Classification](https://timeseriesclassification.com/)
-- [Monash Time-Series Extrinsic Regression](http://tseregression.org/)
+## Project Structure
 
-### Experiments
-For classification experiments, run 
+```
+├── exp/ # Auxiliary experiment scripts (legacy or task-specific) 
+├── layers/ # Core layers like shapelet extraction, distance computation, gating 
+├── models/ # Model definitions like SBM, InterpGN, and base DNNs
+├── notebook/ # Jupyter notebooks for result analysis and interpretability
+├── reproduce/ # Reproduction scripts for UEA, EEG, and other benchmarks 
+├── result/ # Experiment outputs: CSV logs
+│ └── UEA/ # Precomputed results from the paper (for reference) 
+├── utils/ # Utilities: data loaders, metrics, logging, reproducibility helpers 
+├── run.py # Main training and evaluation script 
+├── requirements.txt # Python dependencies 
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Install Dependencies
 ```bash
-bash ./reproduce/run_uea.sh
+pip install -r requirements.txt
 ```
 
-For regression experiments, run 
+### 2. Prepare Datasets
+
+Download datasets and place them in `./data/`:
+
+We used following EEG datasets from the multivariate UEA (but you can use any from UEA & UCR Time Series Classification Archive):
+
+1) **`FingerMovements`** has 316 samples in train and 100 samples in test split. The data was recorded using 28 channels, it has 50 timepoints and was downsampled to 100Hz
+
+2) **`SelfRegulationSCP1`** has 268 samples in train and 293 samples in test split. The data was recorded using 6 channels, it has 896 timepoints and sampling rate of 256Hz
+   
+3) **`SelfRegulationSCP2`** has 200 samples in train and 180 samples in test split. The data was recorded using 7 channels, it has 1152 timepoints and sampling rate of 256Hz.
+
+### 3. Run Experiments
+
+To reproduce our EEG experiments:
 ```bash
-bash ./reproduce/run_regression.sh
+bash ./reproduce/run_eeg.sh
 ```
+- Results (CSV files with test accuracy, etc.) are saved to ./result/.
+- Model checkpoints (if enabled) go to ./checkpoints/.
 
-The results for each run are saved in the `./result` folder, and the trained model weights are saved in the `./checkpoints` folder.
+---
 
-### Result Analysis, Visualization, and Interpretability
+## Custom Experiments
 
-We provide notebooks as examples for analyzing the results and intepretable predictions learned by the Shapelet Bottleneck Model (SBM) and the Interpretability Gated Network (InterpGN).
+The main entry point is run.py. Most configurations can be controlled via command-line arguments or by editing the bash scripts (e.g., reproduce/run_eeg.sh).
 
-After running the experiments, use `./notebook/benchmarks.ipynb` to collect the results for benchmarking. Examples of visualizing the shapelets, explanations, and faithfulness are provided in `./notebook/visualization.ipynb`.
+| Parameter               | Description                                      | Example Values                                                                 |
+|-------------------------|--------------------------------------------------|--------------------------------------------------------------------------------|
+| `--model`               | Model architecture to use                        | `SBM`, `InterpGN`                                                              |
+| `--dnn_type`            | Backbone deep neural network                     | `FCN`, `ResNet`                                                                |
+| `--num_shapelet`        | Number of shapelets in the interpretable expert  | `10`, `20`, `50`                                                               |
+| `--lambda_div`          | Diversity regularization strength                | `0.01`, `0.1`, `1.0`                                                           |
+| `--lambda_reg`          | Shapelet regularization strength                 | `0.01`, `0.1`, `1.0`                                                           |
+| `--pool`                | Pooling function over shapelet distances         | `max`, `lse`                                                                   |
+| `--distance_func`       | Distance metric between time series and shapelets| `default`, `cosine`, `manhattan`, `pearson`, `mse`, `eucledian`, `chebyshev`   |
+| `--pool_tau`            | Temperature parameter for `lse` pooling          | `0.5`, `1`, `5`, `10`, `15`, `20`, `25`                                        |
+| `--learnable_tau`       | Whether `tau` is trainable (boolean flag)        | *add flag to enable*                                                           |
+| `--seed`                | Random seed for reproducibility                  | `0`, `42`, `1234`, `2023`, `8237`                                              |
+| `--dataset`             | Name of dataset (must exist in `./data/`)        | `SelfRegulationSCP2`, `FingerMovements`, `FaceDetection`                       |
 
-We also provide full experiments results from **our experiments and reproductions** in `./result/UEA`.
+---
 
+### Next Steps
+Our experiments highlight the need for the more rigorous analysis on the approaches to determine the optimal number and lengths of the shapelets.
+The experiments demonstrated that the test accuracy on the three datasets benefitted from utilizing sampling frequency to induce the lengths of the shapelets, thus, it might be useful to test this hypothesis on the other datasets as well.
+Since our experiments demonstrated that the learned shapelets are more useful for the classification task, it might make sense to try to utilize the similar approach for learning the shapelets for the time series representation in the transformer models such as ShapeFormer, or even the foundation models for EEG data.
 
-## Citation
-```
-@inproceedings{
-    wen2025shedding,
-    title={Shedding Light on Time Series Classification using Interpretability Gated Networks},
-    author={Yunshi Wen and Tengfei Ma and Ronny Luss and Debarun Bhattacharjya and Achille Fokoue and Anak Agung Julius},
-    booktitle={The Thirteenth International Conference on Learning Representations},
-    year={2025}
-}
-```
+### Logging
 
-## Acknowledgement
+Here is the link to our [Neptune.ai](https://app.neptune.ai/o/gribanovds/org/interp-gn/runs/compare?viewId=standard-view&detailsTab=charts&dash=charts&compare=EwFiA)
 
-We thank the research community for the great work on time-series analysis, the open-source codebase, and the datasets, including but not limited to:
-- The codebase is developed based on [Time-Series-Library](https://github.com/thuml/Time-Series-Library).
-- The UEA and UCR teams for collecting and sharing the [time-series classification datasets](https://timeseriesclassification.com/).
-- The Monash team for collecting and sharing the [time-series extrinsic regression datasets](http://tseregression.org/).
+---
+
+### References
+- Yunshi Wen, Tengfei Ma, Ronny Luss, Debarun Bhattacharjya, Achille Fokoue, Anak Agung Julius. Shedding Light on Time Series Classification using Interpretability Gated Networks
+- Xuan-May Le, Ling Luo, Uwe Aickelin, and Minh-Tuan Tran. 2024. ShapeFormer: Shapelet Transformer for Multivariate Time Series Classification. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '24). Association for Computing Machinery, New York, NY, USA, 1484–1494. https://doi.org/10.1145/3637528.3671862
+- Carl H. Lubba, Sarab S. Sethi, Philip Knaute, Simon R. Schultz, Ben D. Fulcher, and Nick S. Jones. 2019. Catch22: CAnonical Time-series CHaracteristics: Selected through highly comparative time-series analysis. Data Min. Knowl. Discov. 33, 6 (Nov 2019), 1821–1852. https://doi.org/10.1007/s10618-019-00647-x

@@ -44,7 +44,8 @@ def ShapeletDistance(x, s):
 
 
 class Shapelet(nn.Module):
-    def __init__(self, dim_data, shapelet_len, num_shapelet=10, stride=1, eps=1., distance_func='euclidean', memory_efficient=False):
+    def __init__(self, dim_data, shapelet_len, num_shapelet=10, stride=1, eps=1., distance_func=None, memory_efficient=False, 
+                 pool='lse', pool_tau=10.0, learnable_tau=False):
         super().__init__()
         
         self.dim = dim_data
@@ -53,9 +54,24 @@ class Shapelet(nn.Module):
         self.stride = stride
         self.distance_func = distance_func
         self.memory_efficient = memory_efficient
+        self.pool_method = pool
         
         self.weights = nn.Parameter(torch.normal(0, 1, (self.n, self.dim, self.length)), requires_grad=True)
         self.eps = eps
+
+        if learnable_tau:
+            # положительная tau: softplus(θ) + 1e-3
+            self.tau_raw = nn.Parameter(torch.tensor(math.log(math.exp(pool_tau)-1.0)), requires_grad=True)
+            self._tau_eps = 1e-3
+        else:
+            self.register_buffer("tau_const", torch.tensor(float(pool_tau)))
+            self.tau_raw = None
+            self._tau_eps = 0.0
+
+    def _get_tau(self):
+        if self.tau_raw is None:
+            return self.tau_const
+        return F.softplus(self.tau_raw) + self._tau_eps
         
     def forward(self, x):
         x = x.unfold(2, self.length, self.stride) # .permute((0, 2, 1, 3)).unsqueeze(2)#.contiguous()
@@ -64,27 +80,87 @@ class Shapelet(nn.Module):
         if self.distance_func == 'cosine':
             d = nn.functional.cosine_similarity(x, self.weights, dim=-1)
             d = torch.ones_like(d) - d
+
         elif self.distance_func == 'pearson':
             d = pearson_corrcoef(x, self.weights)
             d = torch.ones_like(d) - d
+        
+        elif self.distance_func == 'euclidean':
+            d = ((x - self.weights) ** 2).sum(dim=-1).sqrt()
+        
+        elif self.distance_func == 'manhattan':
+            d = (x - self.weights).abs().sum(dim=-1)
+        
+        elif self.distance_func == 'mse':
+            d = ((x - self.weights) ** 2).mean(dim=-1)
+        
+        elif self.distance_func == 'chebyshev':
+            d = (x - self.weights).abs().max(dim=-1)[0]
+        
+        # elif self.distance_func == 'mahalanobis':
+        #     diff = x - self.weights
+        #     d = torch.sqrt(torch.bmm(torch.bmm(diff, self.cov_inv), diff.transpose(-1, -2))).squeeze(-1)
+        
+        # elif self.distance_func == 'dtw':
+        #     d = self.dtw_distance(x, self.weights)
+        
+        # elif self.distance_func == 'softdtw':
+        #     d = self.soft_dtw_distance(x, self.weights)
+        
+        elif self.distance_func == 'cid':  
+            d2 = self.cid_distance(x, self.weights, return_squared=True)   # [B,T,S,C]
+            d = torch.sqrt(d2 + 1e-8)
         else:
             if self.memory_efficient:
                 d = ShapeletDistance(x, self.weights)
             else:
                 d = (x - self.weights).abs().mean(dim=-1)
 
-        # Maximum rbf prob
-        p = torch.exp(-torch.pow(self.eps * d, 2)) # RBF
-        
-        hard = torch.zeros_like(p).scatter_(1, p.argmax(dim=1, keepdim=True), 1.)
-        soft = torch.softmax(p, dim=1)
-        onehot_max = hard + soft - soft.detach()
-        max_p = torch.sum(onehot_max * p, dim=1)
 
-        return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
+        #print('===',self.pool_method,'===')
+        if self.pool_method == 'lse':
+        # LSE-pooling code
+            logits_t = - (self.eps * d) ** 2     # [B, T', N]
+            tau = self._get_tau()
+            pooled_logits = (1.0 / tau) * torch.logsumexp(tau * logits_t, dim=1)  # [B, N]
+            pred = torch.exp(pooled_logits)      # [B, N]
+            return pred.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
     
-    def derivative(self):
-        return torch.diff(self.weights, dim=-1)
+        elif self.pool_method == 'max':
+            # Original RBF code
+            p = torch.exp(-torch.pow(self.eps * d, 2)) # RBF
+            hard = torch.zeros_like(p).scatter_(1, p.argmax(dim=1, keepdim=True), 1.)
+            soft = torch.softmax(p, dim=1)
+            onehot_max = hard + soft - soft.detach()
+            max_p = torch.sum(onehot_max * p, dim=1)
+            return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
+        
+    def cid_distance(self, x, weights, eps=1e-8):
+        diff = x - weights                 # broadcast: [B,T,1,C,L] - [S,C,L] -> [B,T,S,C,L]
+        ed2 = (diff * diff).sum(dim=-1)    # [B,T,S,C]  -- это ED^2
+
+        dx = x[..., 1:] - x[..., :-1]                # [B,T,1,C,L-1]
+        c_x = (dx * dx).sum(dim=-1)                  # [B,T,1,C]
+
+        dw = weights[..., 1:] - weights[..., :-1]    # [S,C,L-1]
+        c_w = (dw * dw).sum(dim=-1)                  # [S,C]
+
+        max_c = torch.maximum(c_x, c_w.unsqueeze(0).unsqueeze(0))   # [B,T,S,C]
+        min_c = torch.minimum(c_x, c_w.unsqueeze(0).unsqueeze(0))   # [B,T,S,C]
+        ratio = max_c / (min_c + eps)                               # [B,T,S,C]
+
+        cid2 = ed2 * ratio                                           # [B,T,S,C]
+
+        return cid2
+
+    # def cid_distance_memory_efficient(self, x, weights):
+    #     """Memory-efficient CID"""
+    #     batch_size, num_windows, _, num_channels, length = x.shape
+    #     num_shapelets = weights.shape[0]
+        
+    #     results = []
+
+
     
 
 class DistThresholdShapelet(Shapelet):
@@ -136,7 +212,8 @@ class ShapeBottleneckModel(nn.Module):
             self, 
             configs,
             num_shapelet=[5, 5, 5, 5],
-            shapelet_len=[0.1, 0.2, 0.3, 0.5]
+            shapelet_len=[0.1, 0.2, 0.3, 0.5],
+            pool='lse', pool_tau=10.0, learnable_tau=False,
         ):
         super().__init__()
         
@@ -146,6 +223,20 @@ class ShapeBottleneckModel(nn.Module):
         self.shapelet_len = []
         self.normalize = True
         self.configs = configs
+
+        self.pool = pool
+        if learnable_tau:
+            self.tau_raw = nn.Parameter(torch.tensor(math.log(math.exp(pool_tau)-1.0)), requires_grad=True)
+            self._tau_eps = 1e-3
+        else:
+            self.register_buffer("tau_const", torch.tensor(float(pool_tau)))
+            self.tau_raw = None
+            self._tau_eps = 0.0
+
+        def _get_tau(self):
+            if self.tau_raw is None:
+                return self.tau_const
+            return F.softplus(self.tau_raw) + self._tau_eps
         
         # Initialize shapelets
         self.shapelets = nn.ModuleList()
@@ -159,7 +250,12 @@ class ShapeBottleneckModel(nn.Module):
                     eps=configs.epsilon,
                     distance_func=configs.distance_func,
                     memory_efficient=configs.memory_efficient,
-                    stride=1 if configs.seq_len < 3000 else max(1, int(np.log2(sl)))
+                    stride=1 if configs.seq_len < 3000 else max(1, int(np.log2(sl))),
+                    # added
+                    pool=getattr(configs, 'pool', 'lse'),
+                    pool_tau=getattr(configs, 'pool_tau', 10.0),
+                    learnable_tau=getattr(configs, 'learnable_tau', False),
+                    # added
                 )
             )
             self.shapelet_len.append(sl)
