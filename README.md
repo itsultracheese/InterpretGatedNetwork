@@ -112,6 +112,8 @@ To reproduce the shapelet discovery process:
 ```
 5. Run `python cpu_main.py --data_path [data path] --window_size [window size]`, the window size is 100 for the SelfRegulation datasets and 20 for the FingerMovements.
 
+The scripts for ablation study on K is in `reproduce/run_k_grid.sh`, the scripts for learning the shapelets of lengths based on the sampling frequency are in `reproduce/run_new_lengths_fm.sh`, `reproduce/run_new_lengths_scp1.sh`, and `reproduce/run_new_lengths_scp2.sh`
+
 ---
 
 ### References
