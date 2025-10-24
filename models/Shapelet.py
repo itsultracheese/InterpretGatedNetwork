@@ -89,22 +89,23 @@ class Shapelet(nn.Module):
                 d = (x - self.weights).abs().mean(dim=-1)
 
         # Maximum rbf prob
-        # p = torch.exp(-torch.pow(self.eps * d, 2)) # RBF
-        
-        # hard = torch.zeros_like(p).scatter_(1, p.argmax(dim=1, keepdim=True), 1.)
-        # soft = torch.softmax(p, dim=1)
-        # onehot_max = hard + soft - soft.detach()
-        # max_p = torch.sum(onehot_max * p, dim=1)
+        if self.pool == 'max':
+            p = torch.exp(-torch.pow(self.eps * d, 2)) # RBF
+            
+            hard = torch.zeros_like(p).scatter_(1, p.argmax(dim=1, keepdim=True), 1.)
+            soft = torch.softmax(p, dim=1)
+            onehot_max = hard + soft - soft.detach()
+            max_p = torch.sum(onehot_max * p, dim=1)
 
-        # return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
+            return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
 
         # LSE-пулинг по времени для RBF-логитов
-        
-        logits_t = - (self.eps * d) ** 2     # [B, T', N]
-        tau = self._get_tau()
-        pooled_logits = (1.0 / tau) * torch.logsumexp(tau * logits_t, dim=1)  # [B, N]
-        pred = torch.exp(pooled_logits)      # [B, N]
-        return pred.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
+        elif self.pool == 'lse':
+            logits_t = - (self.eps * d) ** 2     # [B, T', N]
+            tau = self._get_tau()
+            pooled_logits = (1.0 / tau) * torch.logsumexp(tau * logits_t, dim=1)  # [B, N]
+            pred = torch.exp(pooled_logits)      # [B, N]
+            return pred.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
     
     def derivative(self):
         return torch.diff(self.weights, dim=-1)
@@ -189,6 +190,8 @@ class ShapeBottleneckModel(nn.Module):
         self.shapelets = nn.ModuleList()
         for i, l in enumerate(shapelet_len):
             sl = max(3, np.ceil(l*configs.seq_len).astype(int))
+            # sl = l.astype(int)
+            # sl = int(l)
             self.shapelets.append(
                 Shapelet(
                     dim_data=self.num_channel, 

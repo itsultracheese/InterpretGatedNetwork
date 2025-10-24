@@ -137,6 +137,7 @@ if __name__ == "__main__":
 
         print(f"{'=' * 5} Experiment {i} {'=' * 5} ", flush=True)
         experiment = exp_cls(args=args)
+        # experiment = exp_cls(args=args, shapelet_lengths=[12, 25, 51, 128, 204, 256, 512])
         experiment.print_args()
         print()
 
