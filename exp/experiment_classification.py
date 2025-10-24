@@ -93,8 +93,7 @@ class Experiment(object):
         for arg in vars(self.args):
             print(f"{arg}: {getattr(self.args, arg)}")
 
-    def _build_model(self):
-        shapelet_lengths = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]
+    def _build_model(self, shapelet_lengths = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]):
         num_shapelet = [self.args.num_shapelet] * len(shapelet_lengths)
 
         model = self.model_dict[self.args.model](
