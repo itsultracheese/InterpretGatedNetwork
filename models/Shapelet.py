@@ -116,19 +116,8 @@ class Shapelet(nn.Module):
             else:
                 d = (x - self.weights).abs().mean(dim=-1)
 
-        # Maximum rbf prob
-        if self.pool == 'max':
-            p = torch.exp(-torch.pow(self.eps * d, 2)) # RBF
-            
-            hard = torch.zeros_like(p).scatter_(1, p.argmax(dim=1, keepdim=True), 1.)
-            soft = torch.softmax(p, dim=1)
-            onehot_max = hard + soft - soft.detach()
-            max_p = torch.sum(onehot_max * p, dim=1)
-
-            return max_p.flatten(start_dim=1), d.min(dim=1).values.flatten(start_dim=1)
-
         # LSE-пулинг по времени для RBF-логитов
-        elif self.pool == 'lse':
+        if self.pool == 'lse':
             logits_t = - (self.eps * d) ** 2     # [B, T', N]
             tau = self._get_tau()
             pooled_logits = (1.0 / tau) * torch.logsumexp(tau * logits_t, dim=1)  # [B, N]

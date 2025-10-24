@@ -40,6 +40,10 @@ The goal of this project is to try to enhance the work of InterpGN for biomedica
 pip install -r requirements.txt
 ```
 
+---
+
+## Quick Start
+
 ### 2. Prepare Datasets
 
 Download datasets and place them in `./data/`:
