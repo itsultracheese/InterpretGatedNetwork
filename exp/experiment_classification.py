@@ -55,7 +55,7 @@ class Experiment(object):
         'LTS': DistThresholdSBM,
         'DNN': get_dnn_model
     }
-    def __init__(self, args):
+    def __init__(self, args, shapelet_lengths=[0.05, 0.1, 0.2, 0.3, 0.5, 0.8], precomputed_shapelets=False):
         self.train_data, self.train_loader = data_provider(args, flag="TRAIN")
         self.test_data, self.test_loader = data_provider(args, flag="TEST")
         self.val_data, self.val_loader = data_provider(args, flag='TEST')
@@ -70,7 +70,10 @@ class Experiment(object):
         self.args = args
         self.device = torch.device('cuda')
         self.loss_fn = nn.CrossEntropyLoss()
-        self.model = self._build_model().to(self.device)
+        self.model = self._build_model(
+            shapelet_lengths=shapelet_lengths,
+            precomputed_shapelets=precomputed_shapelets
+            ).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=self.args.train_epochs)
         self.checkpoint_dir = "./checkpoints/{}/{}/dnn-{}_seed-{}_k-{}_div-{}_reg-{}_eps-{}_beta-{}_dfunc-{}_cls-{}".format(
@@ -93,15 +96,22 @@ class Experiment(object):
         for arg in vars(self.args):
             print(f"{arg}: {getattr(self.args, arg)}")
 
-    def _build_model(self):
-        shapelet_lengths = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8]
+    def _build_model(self, shapelet_lengths=[0.05, 0.1, 0.2, 0.3, 0.5, 0.8], precomputed_shapelets=False):
         num_shapelet = [self.args.num_shapelet] * len(shapelet_lengths)
 
-        model = self.model_dict[self.args.model](
-            configs=self.args,
-            num_shapelet = num_shapelet,
-            shapelet_len = shapelet_lengths,
-        )
+        if self.args.model == 'SBM':
+            model = self.model_dict[self.args.model](
+                configs=self.args,
+                num_shapelet = num_shapelet,
+                shapelet_len = shapelet_lengths,
+                precomputed_shapelets=precomputed_shapelets
+            )
+        else:
+            model = self.model_dict[self.args.model](
+                configs=self.args,
+                num_shapelet = num_shapelet,
+                shapelet_len = shapelet_lengths
+            )
 
         if self.args.multi_gpu:
             model = nn.DataParallel(model)

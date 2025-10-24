@@ -40,6 +40,10 @@ The goal of this project is to try to enhance the work of InterpGN for biomedica
 pip install -r requirements.txt
 ```
 
+---
+
+## Quick Start
+
 ### 2. Prepare Datasets
 
 Download datasets and place them in `./data/`:
@@ -91,6 +95,28 @@ Since our experiments demonstrated that the learned shapelets are more useful fo
 ### Logging
 
 Here is the link to our [Neptune.ai](https://app.neptune.ai/o/gribanovds/org/interp-gn/runs/compare?viewId=standard-view&detailsTab=charts&dash=charts&compare=EwFiA)
+
+## Amina's weird experiments
+
+All the notebooks are in the `experiments` folder.
+
+To use the pre-discovered shapelets, download them from the https://disk.yandex.ru/d/iOaiDiW2zWa9MQ and put into `store` folder in the project directory.
+
+To reproduce the shapelet discovery process:
+
+1. Clone https://github.com/xuanmay2701/shapeformer/tree/main
+2. Install their requirements `pip install -r requirements.txt`
+3. Change the 82 line in `cpu_main.py` to `shapelet_discovery.set_window_size(int(args.window_size))`
+4. To the end of the `cpu_main.py` append:
+```
+            sc_path = "store/" + problem + "_sd2.pkl"
+            file = open(sc_path, 'wb')
+            pickle.dump(shapelet_discovery, file)
+            file.close()
+```
+5. Run `python cpu_main.py --data_path [data path] --window_size [window size]`, the window size is 100 for the SelfRegulation datasets and 20 for the FingerMovements.
+
+The scripts for ablation study on K is in `reproduce/run_k_grid.sh`, the scripts for learning the shapelets of lengths based on the sampling frequency are in `reproduce/run_new_lengths_fm.sh`, `reproduce/run_new_lengths_scp1.sh`, and `reproduce/run_new_lengths_scp2.sh`
 
 ---
 

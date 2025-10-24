@@ -98,6 +98,11 @@ def get_args():
     parser.add_argument('--seasonal_patterns', type=str, default='Monthly', help='subset for M4')
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
 
+    # arguments for specific shapelet lengths
+    parser.add_argument('--shapelets_for_fm', action='store_true', help='use s_freq-based shapelets for FingerMovements', default=False)
+    parser.add_argument('--shapelets_for_scp1', action='store_true', help='use s_freq-based shapelets for SelfRegulationSCP1', default=False)
+    parser.add_argument('--shapelets_for_scp2', action='store_true', help='use s_freq-based shapelets for SelfRegulationSCP2', default=False)
+
     args = parser.parse_args()
 
     device = pick_device()
@@ -136,7 +141,15 @@ if __name__ == "__main__":
         args.seed = seed
 
         print(f"{'=' * 5} Experiment {i} {'=' * 5} ", flush=True)
-        experiment = exp_cls(args=args)
+
+        if args.shapelets_for_fm:
+            experiment = exp_cls(args=args, shapelet_lengths=[3, 5, 10, 20, 30], precomputed_shapelets=True)
+        elif args.shapelets_for_scp1:
+            experiment = exp_cls(args=args, shapelet_lengths=[12, 25, 51, 128, 204, 256, 512], precomputed_shapelets=True)
+        elif args.shapelets_for_scp2:
+            experiment = exp_cls(args=args, shapelet_lengths=[12, 25, 51, 128, 204, 256, 512], precomputed_shapelets=True)
+        else:
+            experiment = exp_cls(args=args)
         experiment.print_args()
         print()
 
