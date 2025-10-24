@@ -223,6 +223,7 @@ class ShapeBottleneckModel(nn.Module):
             num_shapelet=[5, 5, 5, 5],
             shapelet_len=[0.1, 0.2, 0.3, 0.5],
             pool='lse', pool_tau=10.0, learnable_tau=False,
+            precomputed_shapelets=False
         ):
         super().__init__()
         
@@ -232,6 +233,7 @@ class ShapeBottleneckModel(nn.Module):
         self.shapelet_len = []
         self.normalize = True
         self.configs = configs
+        self.precomputed_shapelets = precomputed_shapelets
 
         self.pool = pool
         if learnable_tau:
@@ -250,9 +252,10 @@ class ShapeBottleneckModel(nn.Module):
         # Initialize shapelets
         self.shapelets = nn.ModuleList()
         for i, l in enumerate(shapelet_len):
-            sl = max(3, np.ceil(l*configs.seq_len).astype(int))
-            # sl = l.astype(int)
-            # sl = int(l)
+            if precomputed_shapelets:
+                sl = int(l)
+            else:
+                sl = max(3, np.ceil(l*configs.seq_len).astype(int))
             self.shapelets.append(
                 Shapelet(
                     dim_data=self.num_channel, 
